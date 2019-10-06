@@ -9,10 +9,9 @@
 #    but WITHOUT ANY WARRANTY; without even the implied warranty of
 #    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
 #    GNU Lesser General Public License for more details.
-#
+#s
 #    You should have received a copy of the GNU Lesser General Public
 #    License along with DEAP. If not, see <http://www.gnu.org/licenses/>.
-
 """The :mod:`~deap.base` module provides basic structures to build
 evolutionary algorithms. It contains the :class:`~deap.base.Toolbox`, useful
 to store evolutionary operators, and a virtual :class:`~deap.base.Fitness`
@@ -20,15 +19,11 @@ class used as base class, for the fitness member of any individual. """
 
 import sys
 
-try:
-    from collections.abc import Sequence
-except ImportError:
-    from collections import Sequence
-
+from collections import Sequence
 from copy import deepcopy
 from functools import partial
 from operator import mul, truediv
-
+import rpy2.robjects as robjects
 
 class Toolbox(object):
     """A toolbox for evolution that contains the evolutionary operators. At
@@ -66,8 +61,8 @@ class Toolbox(object):
         The following code block is an example of how the toolbox is used. ::
 
             >>> def func(a, b, c=3):
-            ...     print a, b, c
-            ...
+            ...     print(a, b, c)
+            ... 
             >>> tools = Toolbox()
             >>> tools.register("myFunc", func, 2, c=4)
             >>> tools.myFunc(3)
@@ -189,12 +184,12 @@ class Fitness(object):
             self.wvalues = tuple(map(mul, values, self.weights))
         except TypeError:
             _, _, traceback = sys.exc_info()
-            raise TypeError, ("Both weights and assigned values must be a "
+            raise TypeError("Both weights and assigned values must be a "
                               "sequence of numbers when assigning to values of "
                               "%r. Currently assigning value(s) %r of %r to a "
                               "fitness with weights %s."
                               % (self.__class__, values, type(values),
-                                 self.weights)), traceback
+                                 self.weights)).with_traceback(traceback)
 
     def delValues(self):
         self.wvalues = ()
@@ -204,6 +199,16 @@ class Fitness(object):
                        "in order to set the fitness and ``del individual.fitness.values`` "
                        "in order to clear (invalidate) the fitness. The (unweighted) fitness "
                        "can be directly accessed via ``individual.fitness.values``."))
+
+
+    def compare(self, x_vet, y_vet, min_p_value=0.1):
+        # USANDO o R para calcular t-test
+        rd1 = (robjects.FloatVector(x_vet))
+        rd2 = (robjects.FloatVector(y_vet))
+        rvtest = robjects.r['t.test']
+        pvalue = rvtest(rd1, rd2, paired=True)[2][0]
+
+        return pvalue < min_p_value
 
     def dominates(self, other, obj=slice(None)):
         """Return true if each objective of *self* is not strictly worse than
@@ -216,11 +221,23 @@ class Fitness(object):
         """
         not_equal = False
         for self_wvalue, other_wvalue in zip(self.wvalues[obj], other.wvalues[obj]):
-            if self_wvalue > other_wvalue:
-                not_equal = True
-            elif self_wvalue < other_wvalue:
-                return False
-        return not_equal
+            try:
+                if(len(self_wvalue))>1:
+                    equal = self.compare(self_wvalue, other_wvalue)
+                    if equal:
+                        return False
+                    mean_self_wvalue = sum(self_wvalue)/len(self_wvalue)
+                    mean_other_wvalue = sum(other_wvalue)/len(other_wvalue)
+                    if mean_self_wvalue < mean_other_wvalue:
+                        return False
+                    if mean_self_wvalue > mean_other_wvalue:
+                        return True
+            except:
+                if self_wvalue > other_wvalue:
+                    not_equal = True
+                elif self_wvalue < other_wvalue:
+                    return False
+                return not_equal
 
     @property
     def valid(self):
@@ -267,3 +284,4 @@ class Fitness(object):
         """Return the Python code to build a copy of the object."""
         return "%s.%s(%r)" % (self.__module__, self.__class__.__name__,
                               self.values if self.valid else tuple())
+
