@@ -5,7 +5,7 @@ from itertools import chain
 import math
 from operator import attrgetter, itemgetter
 import random
-
+from copy import deepcopy
 import numpy
 
 ######################################
@@ -68,6 +68,24 @@ def sortNondominated(individuals, k, first_front_only=False):
        non-dominated sorting genetic algorithm for multi-objective
        optimization: NSGA-II", 2002.
     """
+    individuals_copy = deepcopy(individuals)
+    ##
+    num_individuals = len(individuals)
+    for indice in range(num_individuals):
+        num_objectives = len(individuals[0].fitness.wvalues)
+        new_arr = []
+        new_w_arr = []
+        for indice_fit in range(num_objectives):
+            try:
+                new_arr.append(sum(individuals[indice].fitness.values[indice_fit]) / len(
+                    individuals[indice].fitness.values[indice_fit]))
+            except:
+                new_arr.append(individuals[indice].fitness.values[indice_fit])
+            new_w_arr.append(new_arr[indice_fit] * individuals[indice].fitness.weights[indice_fit])
+        individuals[indice].fitness.values = tuple(new_arr)
+        individuals[indice].fitness.wvalues = tuple(new_w_arr)
+    ##
+
     if k == 0:
         return []
 
@@ -76,6 +94,13 @@ def sortNondominated(individuals, k, first_front_only=False):
         map_fit_ind[ind.fitness].append(ind)
     fits = list(map_fit_ind.keys())
 
+    temp_fits = deepcopy(fits)
+    for i in range(len(fits)):
+        temp_fits[i].values = individuals_copy[i].fitness.values
+        temp_fits[i].weights = individuals_copy[i].fitness.weights
+        temp_fits[i].wvalues = individuals_copy[i].fitness.wvalues
+
+
     current_front = []
     next_front = []
     dominating_fits = defaultdict(int)
@@ -83,13 +108,17 @@ def sortNondominated(individuals, k, first_front_only=False):
 
     # Rank first Pareto front
     for i, fit_i in enumerate(fits):
+        j = i + 1
         for fit_j in fits[i+1:]:
-            if fit_i.dominates(fit_j):
+            # if fit_i.dominates(fit_j):
+            if temp_fits[i].dominates(temp_fits[j]):
                 dominating_fits[fit_j] += 1
                 dominated_fits[fit_i].append(fit_j)
-            elif fit_j.dominates(fit_i):
+            # elif fit_j.dominates(fit_i):
+            elif temp_fits[j].dominates(temp_fits[i]):
                 dominating_fits[fit_i] += 1
                 dominated_fits[fit_j].append(fit_i)
+            j += 1
         if dominating_fits[fit_i] == 0:
             current_front.append(fit_i)
 
@@ -114,6 +143,7 @@ def sortNondominated(individuals, k, first_front_only=False):
             current_front = next_front
             next_front = []
 
+    individuals = deepcopy(individuals)
     return fronts
 
 def assignCrowdingDist(individuals):
@@ -685,7 +715,7 @@ def uniform_reference_points(nobj, p=4, scaling=None):
 ######################################
 
 def selSPEA2(individuals, k):
-    copy_individuals = individuals.copy()
+    copy_individuals = deepcopy(individuals)
 
 
     """Apply SPEA-II selection operator on the *individuals*. Usually, the
@@ -818,7 +848,7 @@ def selSPEA2(individuals, k):
         for index in reversed(sorted(to_remove)):
             del chosen_indices[index]
 
-    individuals = copy_individuals.copy()
+    individuals = deepcopy(copy_individuals)
     return [individuals[i] for i in chosen_indices]
 
 def _randomizedSelect(array, begin, end, i):
